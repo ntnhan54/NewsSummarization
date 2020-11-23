@@ -9,21 +9,14 @@ Original file is located at
 ### Download
 """
 """### Code"""
+from info_extraction import *
+from sys import argv
 
-import pandas as pd
 import json 
-from bs4 import BeautifulSoup
+
 import numpy as np
-from tqdm import tqdm_notebook as tqdm
-
-from sklearn.model_selection import train_test_split
-
-from tensorflow import keras
-from tensorflow.keras import layers
-import tensorflow as tf
 
 from transformers import TFRobertaForSequenceClassification, AutoTokenizer, RobertaConfig
-from vncorenlp import VnCoreNLP
 from underthesea import sent_tokenize
 from fairseq.data import Dictionary
 from fairseq.data.encoders.fastbpe import fastBPE
@@ -36,16 +29,17 @@ from torch.utils.data import DataLoader
 from transformers import RobertaForSequenceClassification, AdamW
 import torch.nn.functional as F
 import jsonlines
-MAX_SEQUENCE_LENGTH = 256
 
+MAX_SEQUENCE_LENGTH = 256
 
 vocab = Dictionary()
 vocab.add_from_file("/content/PhoBERT_base_transformers/dict.txt")
 
 class BPE():
     bpe_codes = '/content/PhoBERT_base_transformers'
-    args = BPE()
-    bpe = fastBPE(args)
+
+args = BPE()
+bpe = fastBPE(args)
 
 def convert_lines(train, vocab = vocab, bpe = bpe, max_sequence_length = MAX_SEQUENCE_LENGTH):
     outputs = np.zeros((len(train), max_sequence_length))
@@ -80,7 +74,7 @@ class RobertaForAIViVN(BertPreTrainedModel):
         self.qa_outputs = nn.Linear(4*config.hidden_size, self.num_labels)
         self.init_weights()
 
-   def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
                 start_positions=None, end_positions=None):
 
        outputs = self.roberta(input_ids,
@@ -140,7 +134,8 @@ def get_annotation(text, model):
 
 # tags = ["goal_info", "match_info", "match_result", "card_info", "substitution", 'penalty']
 
-def origin_to_summary(corpus, team_name_set = team_name_set):
+team_name_set = get_team_name_set('train.jsonl')
+def origin_to_summary(corpus, team_name_set = team_name_set, model):
     summary = {
         "players": { "team1":"", "team2":"" },
         "score_board": { "score1":"0", "score2":"0" },
@@ -196,7 +191,7 @@ def origin_to_summary(corpus, team_name_set = team_name_set):
             #do something
             card = { "player_name":"", "time":"", "team":"" }
 
-            res = process_card_info(text)
+            res = process_card_info(text, team_name_set)
 
             if summary["players"]["team1"] in res["names"]:
                 card["team"] = summary["players"]["team1"]
@@ -216,7 +211,7 @@ def origin_to_summary(corpus, team_name_set = team_name_set):
             #do something
             sub = { "player_in":"", "time":"", "player_out":"" }
 
-            res = process_subtitutions(text)
+            res = process_subtitutions(text, team_name_set)
 
             if len(res["time"]) != 0:
                 sub["time"] = res["time"][0]
@@ -236,9 +231,11 @@ def origin_to_summary(corpus, team_name_set = team_name_set):
 
 if __name__ == "__main__":
     # Load model
-    modelDir = 'model31'
-    output_dir = ''
-    
+    modelDir = argv[1]
+    test_dir = argv[2]
+    output_dir = argv[3]
+
+    print(len(team_name_set))
     config = RobertaConfig.from_pretrained(
         "/content/PhoBERT_base_transformers/config.json",
         output_hidden_states=True,
@@ -249,10 +246,6 @@ if __name__ == "__main__":
     # RobertaForAIViVN
     model = RobertaForAIViVN.from_pretrained("/content/PhoBERT_base_transformers/model.bin", config=config)
     model = torch.load(modelDir)
-
-    test_dir = 'public_test.jsonl'
-
-    team_name_set = get_team_name_set('/content/train/train.jsonl')
     
     jsonlist= []
     with jsonlines.open(dir) as f:
@@ -264,11 +257,8 @@ if __name__ == "__main__":
             od = line['original_doc']
             for k in od['_source']['body']:
                 sequence_doc = sequence_doc + sent_tokenize(k['text'])
-            res = origin_to_summary(sequence_doc, team_name_set=team_name_set)
+            res = origin_to_summary(sequence_doc, model = model)
             jsonlist.append({"test_id" : line["test_id"], "match_summary" : res})
 
     with jsonlines.open(output_dir, mode='w') as writer:
         writer.write_all(jsonlist)
-
-    pass
-
