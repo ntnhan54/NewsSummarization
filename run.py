@@ -77,16 +77,15 @@ class RobertaForAIViVN(BertPreTrainedModel):
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
                 start_positions=None, end_positions=None):
 
-       outputs = self.roberta(input_ids,
+        outputs = self.roberta(input_ids,
                             attention_mask=attention_mask,
 #                            token_type_ids=token_type_ids,
                             position_ids=position_ids,
                             head_mask=head_mask)
-     
-       cls_output = torch.cat((outputs[2][-1][:,0, ...],outputs[2][-2][:,0, ...], outputs[2][-3][:,0, ...], outputs[2][-4][:,0, ...]),-1)
-       
-       logits = self.qa_outputs(cls_output)
-       return logits
+
+        cls_output = torch.cat((outputs[2][-1][:,0, ...],outputs[2][-2][:,0, ...], outputs[2][-3][:,0, ...], outputs[2][-4][:,0, ...]),-1)
+        logits = self.qa_outputs(cls_output)
+        return logits
 
 # Load model
 
@@ -100,7 +99,8 @@ config = RobertaConfig.from_pretrained(
 # RobertaForAIViVN
 model = RobertaForAIViVN.from_pretrained("/content/PhoBERT_base_transformers/model.bin", config=config)
 
-device = torch.device('cpu')
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
 # Creating optimizer and lr schedulers
 param_optimizer = list(model.named_parameters())
 no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -112,7 +112,12 @@ optimizer_grouped_parameters = [
 optim = AdamW(optimizer_grouped_parameters, 4e-5, correct_bias=False)  # To reproduce BertAdam specific behavior set correct_bias=False
 avg_loss = 0
 
-
+if torch.cuda.device_count():
+    print(f"Training using {torch.cuda.device_count()} gpus")
+    model = nn.DataParallel(model)
+    tsfm = model.module.roberta
+else:
+    tsfm = model.roberta
 
 for child in tsfm.children():
         for param in child.parameters():
@@ -123,7 +128,7 @@ for child in tsfm.children():
 
 def get_annotation(text, model):
     text_encoding = convert_lines([text])
-    input = torch.tensor(text_encoding).cpu()
+    input = torch.tensor(text_encoding)
     y_pred = model(input.long(), input > 0).tolist()
     return (np.array(y_pred) > 0).astype(int).reshape(-1)
 
@@ -242,10 +247,11 @@ if __name__ == "__main__":
     # RobertaForAIViVN
     model = RobertaForAIViVN.from_pretrained("/content/PhoBERT_base_transformers/model.bin", config=config)
     model = torch.load(modelDir)
+    
     team_name_set = get_team_name_set('train.jsonl')
 
     jsonlist= []
-    with jsonlines.open(dir) as f:
+    with jsonlines.open(test_dir) as f:
         for line in f:
             sequence = []
             sequence_doc = []
