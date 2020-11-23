@@ -134,8 +134,9 @@ def get_annotation(text, model):
 
 # tags = ["goal_info", "match_info", "match_result", "card_info", "substitution", 'penalty']
 
-team_name_set = get_team_name_set('train.jsonl')
-def origin_to_summary(corpus, team_name_set = team_name_set, model):
+# team_name_set = get_team_name_set('train.jsonl')
+
+def origin_to_summary(corpus, team_name_set, model):
     summary = {
         "players": { "team1":"", "team2":"" },
         "score_board": { "score1":"0", "score2":"0" },
@@ -235,7 +236,7 @@ if __name__ == "__main__":
     test_dir = argv[2]
     output_dir = argv[3]
 
-    print(len(team_name_set))
+
     config = RobertaConfig.from_pretrained(
         "/content/PhoBERT_base_transformers/config.json",
         output_hidden_states=True,
@@ -246,7 +247,8 @@ if __name__ == "__main__":
     # RobertaForAIViVN
     model = RobertaForAIViVN.from_pretrained("/content/PhoBERT_base_transformers/model.bin", config=config)
     model = torch.load(modelDir)
-    
+    team_name_set = get_team_name_set('train.jsonl')
+
     jsonlist= []
     with jsonlines.open(dir) as f:
         for line in f:
@@ -257,7 +259,7 @@ if __name__ == "__main__":
             od = line['original_doc']
             for k in od['_source']['body']:
                 sequence_doc = sequence_doc + sent_tokenize(k['text'])
-            res = origin_to_summary(sequence_doc, model = model)
+            res = origin_to_summary(sequence_doc,team_name_set, model = model)
             jsonlist.append({"test_id" : line["test_id"], "match_summary" : res})
 
     with jsonlines.open(output_dir, mode='w') as writer:
