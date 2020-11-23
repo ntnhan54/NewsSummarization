@@ -100,7 +100,7 @@ config = RobertaConfig.from_pretrained(
 # RobertaForAIViVN
 model = RobertaForAIViVN.from_pretrained("/content/PhoBERT_base_transformers/model.bin", config=config)
 
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+device = torch.device('cpu')
 # Creating optimizer and lr schedulers
 param_optimizer = list(model.named_parameters())
 no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -112,12 +112,7 @@ optimizer_grouped_parameters = [
 optim = AdamW(optimizer_grouped_parameters, 4e-5, correct_bias=False)  # To reproduce BertAdam specific behavior set correct_bias=False
 avg_loss = 0
 
-if torch.cuda.device_count():
-    print(f"Training using {torch.cuda.device_count()} gpus")
-    model = nn.DataParallel(model)
-    tsfm = model.module.roberta
-else:
-    tsfm = model.roberta
+
 
 for child in tsfm.children():
         for param in child.parameters():
